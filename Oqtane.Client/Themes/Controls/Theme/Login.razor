@@ -1,0 +1,27 @@
+@namespace Oqtane.Themes.Controls
+@inherits LoginBase
+@inject IStringLocalizer<Login> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+<span class="app-login">
+    <AuthorizeView Roles="@RoleNames.Registered">
+        <Authorizing>
+            <text>...</text>
+        </Authorizing>
+        <Authorized>
+            <button type="button" class="btn btn-primary" @onclick="LogoutUser">@Localizer["Logout"]</button>
+        </Authorized>
+        <NotAuthorized>
+            @if (ShowLogin)
+            {
+                <button type="button" class="btn btn-primary" @onclick="LoginUser">@SharedLocalizer["Login"]</button>
+            }
+        </NotAuthorized>
+    </AuthorizeView>
+</span>
+
+@code
+{
+    [Parameter]
+    public bool ShowLogin { get; set; } = true;
+}

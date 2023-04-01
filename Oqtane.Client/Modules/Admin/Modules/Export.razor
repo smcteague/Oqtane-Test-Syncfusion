@@ -1,0 +1,39 @@
+@namespace Oqtane.Modules.Admin.Modules
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IModuleService ModuleService
+@inject IStringLocalizer<Export> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+<div class="container">
+    <div class="row mb-1 align-items-center">
+        <Label Class="col-sm-3" For="content" HelpText="The Exported Module Content" ResourceKey="Content">Content: </Label>
+        <div class="col-sm-9">
+            <textarea id="content" class="form-control" @bind="@_content" rows="5" readonly></textarea>
+        </div>
+    </div>
+</div>
+
+<button type="button" class="btn btn-success" @onclick="ExportModule">@Localizer["Export"]</button>
+<NavLink class="btn btn-secondary" href="@NavigateUrl()">@SharedLocalizer["Cancel"]</NavLink>
+
+@code {
+    private string _content = string.Empty;
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+    public override string Title => "Export Content";
+
+
+    private async Task ExportModule()
+    {
+        try
+        {
+            _content = await ModuleService.ExportModuleAsync(ModuleState.ModuleId, PageState.Page.PageId);
+            AddModuleMessage(Localizer["Success.Content.Export"], MessageType.Success);
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Exporting Module {ModuleId} {Error}", ModuleState.ModuleId, ex.Message);
+            AddModuleMessage(Localizer["Error.Module.Export"], MessageType.Error);
+        }
+    }
+}

@@ -1,0 +1,194 @@
+@namespace Oqtane.Modules.Admin.Jobs
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IJobService JobService
+@inject IStringLocalizer<Edit> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="name" HelpText="Enter the job name" ResourceKey="Name">Name: </Label>
+            <div class="col-sm-9">
+                <input id="name" class="form-control" @bind="@_name" maxlength="200" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="type" HelpText="The fully qualified job type name" ResourceKey="Type">Type: </Label>
+            <div class="col-sm-9">
+                <input id="type" class="form-control" @bind="@_jobType" readonly />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="enabled" HelpText="Select whether you want the job enabled or not" ResourceKey="Enabled">Enabled? </Label>
+            <div class="col-sm-9">
+                <select id="enabled" class="form-select" @bind="@_isEnabled" required>
+                    <option value="True">@SharedLocalizer["Yes"]</option>
+                    <option value="False">@SharedLocalizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="runs-every" HelpText="Select how often you want the job to run" ResourceKey="RunsEvery">Runs Every: </Label>
+            <div class="col-sm-9">
+                <input id="runs-every" class="form-control" @bind="@_interval" maxlength="4" required />
+                <select id="runs-every" class="form-select" @bind="@_frequency" required>
+                    <option value="m">@Localizer["Minute(s)"]</option>
+                    <option value="H">@Localizer["Hour(s)"]</option>
+                    <option value="d">@Localizer["Day(s)"]</option>
+                    <option value="w">@Localizer["Week(s)"]</option>
+                    <option value="M">@Localizer["Month(s)"]</option>
+                    <option value="O">@Localizer["Once"]</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="retention" HelpText="Number of log entries to retain for this job" ResourceKey="RetentionLog">Retention Log (Items): </Label>
+            <div class="col-sm-9">
+                <input id="retention" class="form-control" @bind="@_retentionHistory" maxlength="4" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="starting" HelpText="Optionally enter the date and time when this job should start executing" ResourceKey="Starting">Starting: </Label>
+            <div class="col-sm-9">
+                <div class="row">
+                    <div class="col">
+                        <input id="starting" type="date" class="form-control" @bind="@_startDate" />
+                    </div>
+                    <div class="col">
+                        <input id="starting" type="text" class="form-control" placeholder="hh:mm" @bind="@_startTime" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="ending" HelpText="Optionally enter the date and time when this job should stop executing" ResourceKey="Ending">Ending: </Label>
+            <div class="col-sm-9">
+                <div class="row">
+                    <div class="col">
+                        <input id="ending" type="date" class="form-control" @bind="@_endDate" />
+                    </div>
+                    <div class="col">
+                        <input id="ending" type="text" class="form-control" placeholder="hh:mm" @bind="@_endTime" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="next" HelpText="Optionally modify the date and time when this job should execute next" ResourceKey="NextExecution">Next Execution: </Label>
+            <div class="col-sm-9">
+                <div class="row">
+                    <div class="col">
+                        <input id="next" type="date" class="form-control" @bind="@_nextDate" />
+                    </div>
+                    <div class="col">
+                        <input id="next" type="text" class="form-control" placeholder="hh:mm" @bind="@_nextTime" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <br />
+    <button type="button" class="btn btn-success" @onclick="SaveJob">@SharedLocalizer["Save"]</button>
+    <NavLink class="btn btn-secondary" href="@NavigateUrl()">@SharedLocalizer["Cancel"]</NavLink>
+    <br />
+    <br />
+    <AuditInfo CreatedBy="@createdby" CreatedOn="@createdon" ModifiedBy="@modifiedby" ModifiedOn="@modifiedon"></AuditInfo>
+</form>
+
+@code {
+	private ElementReference form;
+	private bool validated = false;
+	private int _jobId;
+	private string _name = string.Empty;
+	private string _jobType = string.Empty;
+	private string _isEnabled = "True";
+	private string _interval = string.Empty;
+	private string _frequency = string.Empty;
+	private DateTime? _startDate = null;
+	private string _startTime = string.Empty;
+	private DateTime? _endDate = null;
+	private string _endTime = string.Empty;
+	private string _retentionHistory = string.Empty;
+	private DateTime? _nextDate = null;
+	private string _nextTime = string.Empty;
+	private string createdby;
+	private DateTime createdon;
+	private string modifiedby;
+	private DateTime modifiedon;
+
+	public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Host;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			_jobId = Int32.Parse(PageState.QueryString["id"]);
+			Job job = await JobService.GetJobAsync(_jobId);
+			if (job != null)
+			{
+				_name = job.Name;
+				_jobType = job.JobType;
+				_isEnabled = job.IsEnabled.ToString();
+				_interval = job.Interval.ToString();
+				_frequency = job.Frequency;
+				(_startDate, _startTime) = Utilities.UtcAsLocalDateAndTime(job.StartDate);
+				(_endDate, _endTime) = Utilities.UtcAsLocalDateAndTime(job.EndDate);
+				_retentionHistory = job.RetentionHistory.ToString();
+				(_nextDate, _nextTime) = Utilities.UtcAsLocalDateAndTime(job.NextExecution);
+				createdby = job.CreatedBy;
+				createdon = job.CreatedOn;
+				modifiedby = job.ModifiedBy;
+				modifiedon = job.ModifiedOn;
+			}
+		}
+		catch (Exception ex)
+		{
+			await logger.LogError(ex, "Error Loading Job {JobId} {Error}", _jobId, ex.Message);
+			AddModuleMessage(Localizer["Error.Job.Load"], MessageType.Error);
+		}
+	}
+
+	private async Task SaveJob()
+	{
+		validated = true;
+		var interop = new Interop(JSRuntime);
+		if (await interop.FormValid(form))
+		{
+			var job = await JobService.GetJobAsync(_jobId);
+			job.Name = _name;
+			job.JobType = _jobType;
+			job.IsEnabled = Boolean.Parse(_isEnabled);
+			job.Frequency = _frequency;
+			if (job.Frequency == "O") // once
+			{
+				job.Interval = 1;
+			}
+			else
+			{
+				job.Interval = int.Parse(_interval);
+			}
+			job.StartDate = Utilities.LocalDateAndTimeAsUtc(_startDate, _startTime);
+			job.EndDate = Utilities.LocalDateAndTimeAsUtc(_endDate, _endTime);
+			job.RetentionHistory = int.Parse(_retentionHistory);
+			job.NextExecution = Utilities.LocalDateAndTimeAsUtc(_nextDate, _nextTime);
+
+			try
+			{
+				job = await JobService.UpdateJobAsync(job);
+				await logger.LogInformation("Job Updated {Job}", job);
+				NavigationManager.NavigateTo(NavigateUrl());
+			}
+			catch (Exception ex)
+			{
+				await logger.LogError(ex, "Error Udate Job {Job} {Error}", job, ex.Message);
+				AddModuleMessage(Localizer["Error.Job.Update"], MessageType.Error);
+			}
+		}
+		else
+		{
+			AddModuleMessage(Localizer["Message.Required.JobInfo"], MessageType.Warning);
+		}
+	}
+
+}

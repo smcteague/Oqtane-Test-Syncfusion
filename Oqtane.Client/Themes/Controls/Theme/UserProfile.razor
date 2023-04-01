@@ -1,0 +1,40 @@
+@namespace Oqtane.Themes.Controls
+@inherits ThemeControlBase
+@inject IStringLocalizer<UserProfile> Localizer
+
+@inject NavigationManager NavigationManager
+
+<span class="app-profile">
+    <AuthorizeView Roles="@RoleNames.Registered">
+        <Authorizing>
+            <text>...</text>
+        </Authorizing>
+        <Authorized>
+            <button type="button" class="btn btn-primary" @onclick="UpdateProfile">@context.User.Identity.Name</button>
+        </Authorized>
+        <NotAuthorized>
+            @if (ShowRegister && PageState.Site.AllowRegistration)
+            {
+                <button type="button" class="btn btn-primary" @onclick="RegisterUser">@Localizer["Register"]</button>
+            }
+        </NotAuthorized>
+    </AuthorizeView>
+</span>
+
+@code {
+
+    [Parameter]
+    public bool ShowRegister { get; set; }
+
+    private void RegisterUser()
+    {
+        NavigationManager.NavigateTo(NavigateUrl("register"));
+    }
+
+    private void UpdateProfile()
+    {
+        NavigationManager.NavigateTo(NavigateUrl("profile"));
+    }
+}
+
+

@@ -1,0 +1,125 @@
+@namespace Oqtane.Modules.Admin.Files
+@using System.IO
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IFileService FileService
+@inject IFolderService FolderService
+@inject IStringLocalizer<Add> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+<TabStrip>
+    <TabPanel Name="Upload" Heading="Upload Files" ResourceKey="UploadFiles">
+        <div class="container">
+            <div class="row mb-1 align-items-center">
+                <Label Class="col-sm-3" For="upload" HelpText="Upload the file you want" ResourceKey="Upload">Upload: </Label>
+                <div class="col-sm-9">
+                    <FileManager UploadMultiple="true" ShowFiles="false" FolderId="@_folderId" ShowSuccess="true" />
+                </div>
+            </div>
+        </div>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl()">@SharedLocalizer["Cancel"]</NavLink>
+    </TabPanel>
+    <TabPanel Name="Download" Heading="Download Files" ResourceKey="DownloadFiles">
+        @if (_folders != null)
+        {
+            <form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+                <div class="container">
+                    <div class="row mb-1 align-items-center">
+                        <Label Class="col-sm-3" For="url" HelpText="Enter the url of the file you wish to download" ResourceKey="Url">Url: </Label>
+                        <div class="col-sm-9">
+                            <input id="url" class="form-control" @bind="@_url" required />
+                        </div>
+                    </div>
+                    <div class="row mb-1 align-items-center">
+                        <Label Class="col-sm-3" For="folder" HelpText="Select the folder to save the file in" ResourceKey="Folder">Folder: </Label>
+                        <div class="col-sm-9">
+                            <select id="folder" class="form-select" @bind="@_folderId" required>
+                                <option value="-1">&lt;@Localizer["Folder.Select"]&gt;</option>
+                                @foreach (Folder folder in _folders)
+                                {
+                                    <option value="@(folder.FolderId)">@(new string('-', folder.Level * 2))@(folder.Name)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-1 align-items-center">
+                        <Label Class="col-sm-3" For="name" HelpText="Enter the name of the file being downloaded" ResourceKey="Name">Name: </Label>
+                        <div class="col-sm-9">
+                            <input id="name" class="form-control" @bind="@_name" />
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-success" @onclick="Download">@SharedLocalizer["Download"]</button>
+                <NavLink class="btn btn-secondary" href="@NavigateUrl()">@SharedLocalizer["Cancel"]</NavLink>
+            </form>
+        }
+    </TabPanel>
+</TabStrip>
+
+@code {
+    private ElementReference form;
+    private bool validated = false;
+    private string _url = string.Empty;
+    private List<Folder> _folders;
+    private int _folderId = -1;
+    private string _name = "";
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Admin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _folders = await FolderService.GetFoldersAsync(ModuleState.SiteId);
+
+        if (PageState.QueryString.ContainsKey("id"))
+        {
+            _folderId = int.Parse(PageState.QueryString["id"]);
+        }
+    }
+
+    private async Task Download()
+    {
+        validated = true;
+        var interop = new Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            if (_url == string.Empty || _folderId == -1)
+            {
+                AddModuleMessage(Localizer["Message.Required.UrlFolder"], MessageType.Warning);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_name))
+            {
+                _name = _url.Substring(_url.LastIndexOf("/", StringComparison.Ordinal) + 1);
+            }
+
+            if (!Constants.UploadableFiles.Split(',').Contains(Path.GetExtension(_name).ToLower().Replace(".", "")))
+            {
+                AddModuleMessage(Localizer["Message.Download.InvalidExtension"], MessageType.Warning);
+                return;
+            }
+
+            if (!_name.IsPathOrFileValid())
+            {
+                AddModuleMessage(Localizer["Message.Required.UrlName"], MessageType.Warning);
+                return;
+            }
+
+            try
+            {
+                await FileService.UploadFileAsync(_url, _folderId, _name);
+                await logger.LogInformation("File Downloaded Successfully From Url {Url}", _url);
+                AddModuleMessage(Localizer["Success.Download.File"], MessageType.Success);
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Downloading File From Url {Url} {Error}", _url, ex.Message);
+                AddModuleMessage(Localizer["Error.Download.InvalidUrl"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(SharedLocalizer["Message.InfoRequired"], MessageType.Warning);
+        }
+    }
+}

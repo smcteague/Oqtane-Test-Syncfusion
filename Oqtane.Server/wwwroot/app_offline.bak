@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width">
+    <title>Upgrade Framework</title>
+    <base href="/" />
+    <link rel="stylesheet" href="http://www.oqtane.net/css/app.css">
+</head>
+<body onload="forceWait()">
+    <div>
+	    <br /><br />
+        <h1 align="center">Please Wait... Upgrade In Progress...</h1>
+        <p align="center">(this process can take a few minutes... please be patient)</p>
+    </div>
+
+    <div class="app-progress-indicator"></div>
+
+    <script>
+        function forceWait() {
+            setInterval(function () {
+                window.location.href = "/";
+            }, 120 * 1000);
+        }
+    </script>
+</body>
+</html>
+

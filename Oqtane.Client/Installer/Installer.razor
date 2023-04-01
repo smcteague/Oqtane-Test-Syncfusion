@@ -1,0 +1,294 @@
+@namespace Oqtane.Installer
+@using Oqtane.Interfaces
+@inject NavigationManager NavigationManager
+@inject IInstallationService InstallationService
+@inject ISiteService SiteService
+@inject IUserService UserService
+@inject IDatabaseService DatabaseService
+@inject IJSRuntime JSRuntime
+@inject IStringLocalizer<Installer> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+<div class="container">
+    <div class="row">
+        <div class="mx-auto text-center">
+            <img src="oqtane-black.png" />
+            <div style="font-weight: bold">@SharedLocalizer["Version"] @Constants.Version</div>
+        </div>
+    </div>
+    <hr class="app-rule" />
+    <div class="row justify-content-center">
+        <div class="col text-center">
+            <h2>@Localizer["DatabaseConfig"]</h2><br />
+            <div class="container">
+                <div class="row mb-1 align-items-center">
+                    <Label Class="col-sm-3" For="databasetype" HelpText="Select the type of database you wish to use" ResourceKey="DatabaseType">Database:</Label>
+                    <div class="col-sm-9">
+                        @if (_databases != null)
+                        {
+							<div class="input-group">
+								<select id="databaseType" class="form-select" value="@_databaseName" @onchange="(e => DatabaseChanged(e))" required>
+									@foreach (var database in _databases)
+									{
+										<option value="@database.Name">@Localizer[@database.Name]</option>
+									}
+								</select>
+								@if (!_showConnectionString)
+								{
+									<button type="button" class="btn btn-secondary" @onclick="ToggleConnectionString">@Localizer["EnterConnectionString"]</button>
+								}
+								else
+								{
+									<button type="button" class="btn btn-secondary" @onclick="ToggleConnectionString">@Localizer["EnterConnectionParameters"]</button>
+								}
+							</div>
+                        }
+                    </div>
+                </div>
+				@if (!_showConnectionString)
+				{
+					if (_databaseConfigType != null)
+					{
+						@DatabaseConfigComponent
+					}
+				}
+				else
+				{
+					<div class="row mb-1 align-items-center">
+						<Label Class="col-sm-3" For="connectionstring" HelpText="Enter a complete connection string including all parameters and delimiters" ResourceKey="ConnectionString">Settings:</Label>
+						<div class="col-sm-9">
+							<textarea id="connectionstring" class="form-control" @bind="@_connectionString" rows="3"></textarea>
+						</div>
+					</div>
+				}
+			</div>
+        </div>
+        <div class="col text-center">
+            <h2>@Localizer["ApplicationAdmin"]</h2><br />
+            <div class="container">
+                <div class="row mb-1 align-items-center">
+                    <Label Class="col-sm-3" For="username" HelpText="Provide a username for the primary user accountt" ResourceKey="Username">Username:</Label>
+                    <div class="col-sm-9">
+                        <input id="username" type="text" class="form-control" @bind="@_hostUsername" />
+                    </div>
+                </div>
+                <div class="row mb-1 align-items-center">
+                    <Label Class="col-sm-3" For="password" HelpText="Provide a password for the primary user account" ResourceKey="Password">Password:</Label>
+                    <div class="col-sm-9">
+						<div class="input-group">
+							<input id="password" type="@_passwordType" class="form-control" @bind="@_hostPassword" autocomplete="new-password" />
+							<button type="button" class="btn btn-secondary" @onclick="@TogglePassword">@_togglePassword</button>
+						</div>
+                    </div>
+                </div>
+                <div class="row mb-1 align-items-center">
+                    <Label Class="col-sm-3" For="confirm" HelpText="Please confirm the password entered above by entering it again" ResourceKey="Confirm">Confirm:</Label>
+                    <div class="col-sm-9">
+						<div class="input-group">
+							<input id="confirm" type="@_confirmPasswordType" class="form-control" @bind="@_confirmPassword" autocomplete="new-password" />
+							<button type="button" class="btn btn-secondary" @onclick="@ToggleConfirmPassword">@_toggleConfirmPassword</button>
+						</div>
+                    </div>
+                </div>
+                <div class="row mb-1 align-items-center">
+                    <Label Class="col-sm-3" For="email" HelpText="Provide the email address for the host user account" ResourceKey="Email">Email:</Label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" @bind="@_hostEmail" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <hr class="app-rule" />
+    <div class="row">
+        <div class="mx-auto text-center">
+            <button type="button" class="btn btn-success" @onclick="Install">@Localizer["InstallNow"]</button><br /><br />
+            <ModuleMessage Message="@_message" Type="MessageType.Error"></ModuleMessage>
+        </div>
+        <div class="app-progress-indicator" style="@_loadingDisplay"></div>
+    </div>
+    <div class="row">
+        <div class="mx-auto text-center">
+            <input type="checkbox" @bind="@_register" /> @Localizer["Register"]
+        </div>
+    </div>
+</div>
+
+@code {
+	private List<Database> _databases;
+	private string _databaseName;
+	private Type _databaseConfigType;
+	private object _databaseConfig;
+	private RenderFragment DatabaseConfigComponent { get; set; }
+	private bool _showConnectionString = false;
+	private string _connectionString = string.Empty;
+
+	private string _hostUsername = string.Empty;
+	private string _hostPassword = string.Empty;
+	private string _passwordType = "password";
+	private string _confirmPasswordType = "password";
+	private string _togglePassword = string.Empty;
+	private string _toggleConfirmPassword = string.Empty;
+	private string _confirmPassword = string.Empty;
+	private string _hostEmail = string.Empty;
+	private bool _register = true;
+	private string _message = string.Empty;
+	private string _loadingDisplay = "display: none;";
+
+	protected override async Task OnInitializedAsync()
+	{
+		_togglePassword = SharedLocalizer["ShowPassword"];
+		_toggleConfirmPassword = SharedLocalizer["ShowPassword"];
+
+		_databases = await DatabaseService.GetDatabasesAsync();
+		if (_databases.Exists(item => item.IsDefault))
+		{
+			_databaseName = _databases.Find(item => item.IsDefault).Name;
+		}
+		else
+		{
+			_databaseName = "LocalDB";
+		}
+		LoadDatabaseConfigComponent();
+	}
+
+	private void DatabaseChanged(ChangeEventArgs eventArgs)
+	{
+		try
+		{
+			_databaseName = (string)eventArgs.Value;
+			_showConnectionString = false;
+			LoadDatabaseConfigComponent();
+		}
+		catch
+		{
+			_message = Localizer["Error.DbConfig.Load"];
+		}
+	}
+
+	private void LoadDatabaseConfigComponent()
+	{
+		var database = _databases.SingleOrDefault(d => d.Name == _databaseName);
+		if (database != null)
+		{
+			_databaseConfigType = Type.GetType(database.ControlType);
+			DatabaseConfigComponent = builder =>
+			{
+				builder.OpenComponent(0, _databaseConfigType);
+				builder.AddComponentReferenceCapture(1, inst => { _databaseConfig = Convert.ChangeType(inst, _databaseConfigType); });
+				builder.CloseComponent();
+			};
+		}
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			var interop = new Interop(JSRuntime);
+			await interop.IncludeLink("", "stylesheet", "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.0/css/bootstrap.min.css", "text/css", "sha512-XWTTruHZEYJsxV3W/lSXG1n3Q39YIWOstqvmFsdNEEQfHoZ6vm6E9GK2OrF6DSJSpIbRbi+Nn0WDPID9O7xB2Q==", "anonymous", "");
+			await interop.IncludeScript("", "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.0/js/bootstrap.bundle.min.js", "sha512-9GacT4119eY3AcosfWtHMsT5JyZudrexyEVzTBWV3viP/YfB9e2pEy3N7WXL3SV6ASXpTU0vzzSxsbfsuUH4sQ==", "anonymous", "", "head");
+		}
+	}
+
+	private async Task Install()
+	{
+		var connectionString = String.Empty;
+		if (_showConnectionString)
+		{
+			connectionString = _connectionString;
+		}
+		else
+		{
+			if (_databaseConfig is IDatabaseConfigControl databaseConfigControl)
+			{
+				connectionString = databaseConfigControl.GetConnectionString();
+			}
+		}
+
+		if (connectionString != "" && !string.IsNullOrEmpty(_hostUsername) && !string.IsNullOrEmpty(_hostPassword) && _hostPassword == _confirmPassword && !string.IsNullOrEmpty(_hostEmail) && _hostEmail.Contains("@"))
+		{
+			if (await UserService.ValidatePasswordAsync(_hostPassword))
+			{
+				_loadingDisplay = "";
+				StateHasChanged();
+
+				Uri uri = new Uri(NavigationManager.Uri);
+
+				var database = _databases.SingleOrDefault(d => d.Name == _databaseName);
+
+				var config = new InstallConfig
+				{
+					DatabaseType = database.DBType,
+					ConnectionString = connectionString,
+					Aliases = uri.Authority,
+					HostUsername = _hostUsername,
+					HostPassword = _hostPassword,
+					HostEmail = _hostEmail,
+					HostName = _hostUsername,
+					TenantName = TenantNames.Master,
+					IsNewTenant = true,
+					SiteName = Constants.DefaultSite,
+					Register = _register
+				};
+
+				var installation = await InstallationService.Install(config);
+				if (installation.Success)
+				{
+					NavigationManager.NavigateTo(uri.Scheme + "://" + uri.Authority, true);
+				}
+				else
+				{
+					_message = installation.Message;
+					_loadingDisplay = "display: none;";
+				}				
+			}
+			else
+			{
+				_message = Localizer["Message.Password.Invalid"];				
+			}
+		}
+		else
+		{
+			_message = Localizer["Message.Require.DbInfo"];
+		}
+	}
+
+	private void TogglePassword()
+	{
+		if (_passwordType == "password")
+		{
+			_passwordType = "text";
+			_togglePassword = SharedLocalizer["HidePassword"];
+		}
+		else
+		{
+			_passwordType = "password";
+			_togglePassword = SharedLocalizer["ShowPassword"];
+		}
+	}
+
+	private void ToggleConfirmPassword()
+	{
+		if (_confirmPasswordType == "password")
+		{
+			_confirmPasswordType = "text";
+			_toggleConfirmPassword = SharedLocalizer["HidePassword"];
+		}
+		else
+		{
+			_confirmPasswordType = "password";
+			_toggleConfirmPassword = SharedLocalizer["ShowPassword"];
+		}
+	}
+
+	private void ToggleConnectionString()
+	{
+		if (_databaseConfig is IDatabaseConfigControl databaseConfigControl)
+		{
+			_connectionString = databaseConfigControl.GetConnectionString();
+		}
+		_showConnectionString = !_showConnectionString;
+	}
+
+}

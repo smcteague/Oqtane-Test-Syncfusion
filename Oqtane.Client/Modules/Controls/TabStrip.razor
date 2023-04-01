@@ -1,0 +1,110 @@
+@namespace Oqtane.Modules.Controls
+@inherits ModuleControlBase
+
+<CascadingValue Value="this" IsFixed="true">
+    <div class="container-fluid">
+        <div class="form-group">
+            <ul class="nav nav-tabs" role="tablist">
+                @foreach (TabPanel tabPanel in _tabPanels)
+                {
+                    <li class="nav-item" @key="tabPanel.Name">
+                        @if (tabPanel.Name == ActiveTab)
+                        {
+                            <a class="nav-link active" data-bs-toggle="tab" href="#@(Id + tabPanel.Name)" role="tab" @onclick:preventDefault="true">
+                                @tabPanel.DisplayHeading()
+                            </a>
+                        }
+                        else
+                        {
+							<a class="nav-link" data-bs-toggle="tab" href="#@(Id + tabPanel.Name)" role="tab" @onclick:preventDefault="true">
+                                @tabPanel.DisplayHeading()
+                            </a>
+                        }
+                    </li>
+                }
+            </ul>
+            <div class="tab-content">
+                <br />
+                @ChildContent
+            </div>
+        </div>
+    </div>
+</CascadingValue>
+
+@code {
+	private List<TabPanel> _tabPanels;
+	private string _tabpanelid = string.Empty;
+
+	[Parameter]
+	public RenderFragment ChildContent { get; set; } // contains the TabPanels
+
+	[Parameter]
+	public string ActiveTab { get; set; } // optional - defaults to first TabPanel if not specified. Can also be set using a "tab=" querystring parameter.
+
+	[Parameter]
+	public bool Refresh { get; set; } // optional - used in scenarios where TabPanels are added/removed dynamically within a parent form. ActiveTab may need to be reset as well when this property is used.
+
+	[Parameter]
+	public string Id { get; set; } // optional - used to uniquely identify an instance of a tab strip component (will be set automatically if no value provided)
+
+	protected override void OnInitialized()
+	{
+		if (string.IsNullOrEmpty(Id))
+		{
+			// create unique id for component
+			Id = "TabStrip_" + Guid.NewGuid().ToString("N") + "_" ;
+		}
+	}
+	
+	protected override void OnParametersSet()
+    {
+        if (PageState.QueryString.ContainsKey("tab"))
+        {
+            ActiveTab = PageState.QueryString["tab"];
+        }
+        if (_tabPanels == null || Refresh)
+        {
+            _tabPanels = new List<TabPanel>();
+        }
+    }
+
+    internal void AddTabPanel(TabPanel tabPanel)
+    {
+        if (!_tabPanels.Exists(item => item.Name == tabPanel.Name) && IsAuthorized(tabPanel))
+        {
+            _tabPanels.Add(tabPanel);
+            StateHasChanged();
+        }
+        if (string.IsNullOrEmpty(ActiveTab))
+        {
+            ActiveTab = tabPanel.Name;
+        }
+    }
+
+    private bool IsAuthorized(TabPanel tabPanel)
+    {
+        var authorized = false;
+        switch (tabPanel.Security)
+        {
+            case null: // security not specified - assume SecurityAccessLevel.Anonymous
+                authorized = true;
+                break;
+            case SecurityAccessLevel.Anonymous:
+                authorized = true;
+                break;
+            case SecurityAccessLevel.View:
+                authorized = UserSecurity.IsAuthorized(PageState.User, PermissionNames.View, ModuleState.PermissionList);
+                break;
+            case SecurityAccessLevel.Edit:
+                authorized = UserSecurity.IsAuthorized(PageState.User, PermissionNames.Edit, ModuleState.PermissionList);
+                break;
+            case SecurityAccessLevel.Admin:
+                authorized = UserSecurity.IsAuthorized(PageState.User, RoleNames.Admin);
+                break;
+            case SecurityAccessLevel.Host:
+                authorized = UserSecurity.IsAuthorized(PageState.User, RoleNames.Host);
+                break;
+        }
+        return authorized;
+    }
+}

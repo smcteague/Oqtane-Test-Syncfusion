@@ -1,0 +1,63 @@
+@namespace Oqtane.Modules.Admin.Profiles
+@inherits ModuleBase
+@inject IProfileService ProfileService
+@inject IStringLocalizer<Index> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+@if (_profiles == null)
+{
+    <p><em>@SharedLocalizer["Loading"]</em></p>
+}
+else
+{
+	<ActionLink Action="Add" Text="Add Profile" Security="SecurityAccessLevel.Edit" ResourceKey="AddProfile" />
+
+    <Pager Items="@_profiles">
+        <Header>
+            <th style="width: 1px;">&nbsp;</th>
+            <th style="width: 1px;">&nbsp;</th>
+            <th>@SharedLocalizer["Name"]</th>
+        </Header>
+        <Row>
+			<td><ActionLink Action="Edit" Parameters="@($"id=" + context.ProfileId.ToString())" Security="SecurityAccessLevel.Edit" ResourceKey="EditProfile" /></td>
+			<td><ActionDialog Header="Delete Profile" Message="@string.Format(Localizer["Confirm.Profile.Delete"], context.Name)" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await DeleteProfile(context.ProfileId))" ResourceKey="DeleteProfile" /></td>
+            <td>@context.Name</td>
+        </Row>
+    </Pager>
+}
+
+@code {
+    private List<Profile> _profiles;
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await GetProfilesAsync();
+    }
+
+    private async Task DeleteProfile(int profileId)
+    {
+        try
+        {
+            await ProfileService.DeleteProfileAsync(profileId);
+            await logger.LogInformation("Profile Deleted {ProfileId}", profileId);
+
+            AddModuleMessage(Localizer["Success.Profile.Delete"], MessageType.Success);
+
+            await GetProfilesAsync();
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Profile {ProfileId} {Error}", profileId, ex.Message);
+            AddModuleMessage(Localizer["Error.Profile.Delete"], MessageType.Error);
+        }
+    }
+
+    private async Task GetProfilesAsync()
+    {
+        _profiles = await ProfileService.GetProfilesAsync(PageState.Site.SiteId);
+    }
+}

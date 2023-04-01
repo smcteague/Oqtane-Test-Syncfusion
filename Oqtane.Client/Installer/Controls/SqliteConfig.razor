@@ -1,0 +1,25 @@
+@namespace Oqtane.Installer.Controls
+@implements Oqtane.Interfaces.IDatabaseConfigControl
+
+<div class="row mb-1 align-items-center">
+    <Label Class="col-sm-3" For="server" HelpText="Enter the file name to use for the database" ResourceKey="Server">File Name:</Label>
+    <div class="col-sm-9">
+        <input id="server" type="text" class="form-control" @bind="@_server" />
+    </div>
+</div>
+
+@code {
+    private string _server = "Oqtane-" + DateTime.UtcNow.ToString("yyyyMMddHHmm") + ".db";
+
+    public string GetConnectionString()
+    {
+        var connectionstring = String.Empty;
+
+        if (!String.IsNullOrEmpty(_server))
+        {
+            connectionstring = $"Data Source={_server};";
+        }
+
+        return connectionstring;
+    }
+}

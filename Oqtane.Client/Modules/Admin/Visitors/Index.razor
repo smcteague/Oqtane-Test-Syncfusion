@@ -1,0 +1,200 @@
+@namespace Oqtane.Modules.Admin.Visitors
+@inherits ModuleBase
+@inject IVisitorService VisitorService
+@inject ISiteService SiteService
+@inject ISettingService SettingService
+@inject IStringLocalizer<Index> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+@if (_visitors == null)
+{
+    <p><em>@SharedLocalizer["Loading"]</em></p>
+}
+else
+{
+    <TabStrip>
+        <TabPanel Name="Visitors" Heading="Visitors" ResourceKey="Visitors">
+			<div class="container">
+				<div class="row mb-1 align-items-center">
+					<div class="col-sm-6">
+						<select id="type" class="form-select custom-select" value="@_type" @onchange="(e => TypeChanged(e))">
+							<option value="visitors">@Localizer["AllVisitors"]</option>
+							<option value="users">@Localizer["UsersOnly"]</option>
+						</select>
+					</div>
+					<div class="col-sm-6">
+						<select id="days" class="form-select custom-select" value="@_days" @onchange="(e => DaysChanged(e))">
+							<option value="1">@Localizer["PastDay"]</option>
+							<option value="7">@Localizer["PastWeek"]</option>
+							<option value="30">@Localizer["PastMonth"]</option>
+						</select>
+					</div>
+				</div>
+			</div>
+			<br/>
+			<Pager Items="@_visitors" CurrentPage="@_page.ToString()" OnPageChange="OnPageChange">
+				<Header>
+					<th style="width: 1px;">&nbsp;</th>
+					<th>@Localizer["IP"]</th>
+					<th>@Localizer["User"]</th>
+					<th>@Localizer["Language"]</th>
+					<th>@Localizer["Visits"]</th>
+					<th>@Localizer["Visited"]</th>
+					<th>@Localizer["Created"]</th>
+				</Header>
+				<Row>
+					<td><ActionLink Action="Detail" Parameters="@($"id={context.VisitorId}")" ReturnUrl="@(NavigateUrl(PageState.Page.Path, $"type={_type}&days={_days}&page={_page}"))" ResourceKey="Details" /></td>
+					<td>@context.IPAddress</td>
+					<td>
+						@if (context.UserId != null)
+						{
+							@context.User.DisplayName
+						}
+					</td>
+					<td>@context.Language</td>
+					<td>@context.Visits</td>
+					<td>@context.VisitedOn</td>
+					<td>@context.CreatedOn</td>
+				</Row>
+			</Pager>
+		</TabPanel>
+        <TabPanel Name="Settings" Heading="Settings" ResourceKey="Settings">
+			<div class="container">
+				<div class="row mb-1 align-items-center">
+					<Label Class="col-sm-3" For="tracking" HelpText="Specify if visitor tracking is enabled" ResourceKey="Tracking">Tracking Enabled? </Label>
+					<div class="col-sm-9">
+						<select id="tracking" class="form-select" @bind="@_tracking" >
+							<option value="True">@SharedLocalizer["Yes"]</option>
+							<option value="False">@SharedLocalizer["No"]</option>
+						</select>
+					</div>
+				</div>
+				<div class="row mb-1 align-items-center">
+					<Label Class="col-sm-3" For="filter" HelpText="Comma delimited list of terms which may exist in IP addresses, user agents, or languages identifying visitors which should not be tracked" ResourceKey="Filter">Filter: </Label>
+					<div class="col-sm-9">
+						<textarea id="filter" class="form-control" @bind="@_filter" rows="3"></textarea>
+					</div>
+				</div>
+				<div class="row mb-1 align-items-center">
+					<Label Class="col-sm-3" For="retention" HelpText="Number of days of visitor activity to retain" ResourceKey="Retention">Retention (Days): </Label>
+					<div class="col-sm-9">
+						<input id="retention" class="form-control" @bind="@_retention" />
+					</div>
+				</div>
+				<div class="row mb-1 align-items-center">
+					<Label Class="col-sm-3" For="correlation" HelpText="Indicate if new visitors to this site should be correlated based on their IP Address" ResourceKey="Correlation">Correlate Visitors? </Label>
+					<div class="col-sm-9">
+                        <select id="correlation" class="form-select" @bind="@_correlation">
+							<option value="true">@SharedLocalizer["True"]</option>
+							<option value="false">@SharedLocalizer["False"]</option>
+                        </select>
+					</div>
+				</div>
+			</div>
+			<br />
+			<button type="button" class="btn btn-success" @onclick="SaveSiteSettings">@SharedLocalizer["Save"]</button>
+		</TabPanel>
+	</TabStrip>
+}
+
+@code {
+	private string _type = "visitors";
+	private int _days = 1;
+	private int _page = 1;
+	private List<Visitor> _visitors;
+	private string _tracking;
+	private string _filter = "";
+	private string _retention = "";
+	private string _correlation = "true";
+
+	public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Admin;
+
+	protected override async Task OnParametersSetAsync()
+	{
+		if (PageState.QueryString.ContainsKey("type"))
+		{
+			_type = PageState.QueryString["type"];
+		}
+		if (PageState.QueryString.ContainsKey("days") && int.TryParse(PageState.QueryString["days"], out int days))
+		{
+			_days = days;
+		}
+		if (PageState.QueryString.ContainsKey("page") && int.TryParse(PageState.QueryString["page"], out int page))
+		{
+			_page = page;
+		}
+
+		await GetVisitors();
+
+		_tracking = PageState.Site.VisitorTracking.ToString();
+		var settings = await SettingService.GetSiteSettingsAsync(PageState.Site.SiteId);
+		_filter = SettingService.GetSetting(settings, "VisitorFilter", Constants.DefaultVisitorFilter);
+		_retention = SettingService.GetSetting(settings, "VisitorRetention", "30");
+		_correlation = SettingService.GetSetting(settings, "VisitorCorrelation", "true");
+	}
+
+	private async void TypeChanged(ChangeEventArgs e)
+	{
+		try
+		{
+			_type = e.Value.ToString();
+			await GetVisitors();
+			StateHasChanged();
+		}
+		catch (Exception ex)
+		{
+			await logger.LogError(ex, "Error On TypeChanged");
+		}
+	}
+
+	private async void DaysChanged(ChangeEventArgs e)
+	{
+		try
+		{
+			_days = int.Parse(e.Value.ToString());
+			await GetVisitors();
+			StateHasChanged();
+		}
+		catch (Exception ex)
+		{
+			await logger.LogError(ex, "Error On DateChanged");
+		}
+	}
+
+	private async Task GetVisitors()
+	{
+		_visitors = await VisitorService.GetVisitorsAsync(PageState.Site.SiteId, DateTime.UtcNow.AddDays(-_days));
+		if (_type == "users")
+		{
+			_visitors = _visitors.Where(item => item.UserId != null).ToList();
+		}
+	}
+
+	private async Task SaveSiteSettings()
+	{
+		try
+		{
+			var site = PageState.Site;
+			site.VisitorTracking = bool.Parse(_tracking);
+			await SiteService.UpdateSiteAsync(site);
+
+			var settings = await SettingService.GetSiteSettingsAsync(PageState.Site.SiteId);
+			settings = SettingService.SetSetting(settings, "VisitorFilter", _filter, true);
+			settings = SettingService.SetSetting(settings, "VisitorRetention", _retention, true);
+			settings = SettingService.SetSetting(settings, "VisitorCorrelation", _correlation, true);
+            await SettingService.UpdateSiteSettingsAsync(settings, PageState.Site.SiteId);
+
+			AddModuleMessage(Localizer["Success.SaveSiteSettings"], MessageType.Success);
+		}
+		catch (Exception ex)
+		{
+			await logger.LogError(ex, "Error Saving Site Settings {Error}", ex.Message);
+			AddModuleMessage(Localizer["Error.SaveSiteSettings"], MessageType.Error);
+		}
+	}
+
+	private void OnPageChange(int page)
+	{
+		_page = page;	
+	}
+}

@@ -1,0 +1,53 @@
+@namespace Oqtane.Modules.Controls
+@inherits LocalizableComponent
+
+@if (Name == Parent.ActiveTab)
+{
+    <div id="@(Parent.Id + Name)" class="tab-pane fade show active" role="tabpanel">
+        @ChildContent
+    </div>
+}
+else
+{
+	<div id="@(Parent.Id + Name)" class="tab-pane fade" role="tabpanel">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter]
+    private TabStrip Parent { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Parameter]
+    public string Name { get; set; } // required - name of the TabPanel
+
+    [Parameter]
+    public string Heading { get; set; } // optional - defaults to name if not specified
+
+    [Parameter]
+    public SecurityAccessLevel? Security { get; set; } // optional - can be used to specify SecurityAccessLevel
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+
+        Parent.AddTabPanel((TabPanel)this);
+
+        if (string.IsNullOrEmpty(Heading))
+        {
+            Heading = Localize(nameof(Name), Name);
+        }
+        else
+        {
+            Heading = Localize(nameof(Heading), Heading);
+        }
+    }
+
+    public string DisplayHeading()
+    {
+        return (string.IsNullOrEmpty(Heading)) ? Name : Heading;
+    }
+}

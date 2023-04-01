@@ -1,0 +1,58 @@
+@namespace Oqtane.Modules.Admin.Sites
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IAliasService AliasService
+@inject ISiteService SiteService
+@inject IStringLocalizer<Index> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+@if (_sites == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <ActionLink Action="Add" Text="Add Site" ResourceKey="AddSite" />
+
+    <Pager Items="@_sites">
+        <Header>
+            <th style="width: 1px;">&nbsp;</th>
+            <th style="width: 1px;">&nbsp;</th>
+            <th>@SharedLocalizer["Name"]</th>
+        </Header>
+        <Row>
+            <td><button type="button" class="btn btn-primary" @onclick="@(async () => Edit(context.Name))">@SharedLocalizer["Edit"]</button></td>
+            <td><button type="button" class="btn btn-secondary" @onclick="@(async () => Browse(context.Name))">@Localizer["Browse"]</button></td>
+            <td>@context.Name</td>
+        </Row>
+    </Pager>
+}
+
+@code {
+    private List<Alias> _sites;
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Host;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var aliases = await AliasService.GetAliasesAsync();
+        _sites = new List<Alias>();
+        foreach (Alias alias in aliases)
+        {
+            if (alias.IsDefault && !_sites.Exists(item => item.TenantId == alias.TenantId && item.SiteId == alias.SiteId))
+            {
+                _sites.Add(alias);
+            }
+        }
+    }
+
+    private void Edit(string name)
+    {
+        NavigationManager.NavigateTo(PageState.Uri.Scheme + "://" + name + "/admin/site", true);
+    }
+
+    private void Browse(string name)
+    {
+        NavigationManager.NavigateTo(PageState.Uri.Scheme + "://" + name, true);
+    }
+}

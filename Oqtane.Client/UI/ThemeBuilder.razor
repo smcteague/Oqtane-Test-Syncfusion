@@ -1,0 +1,59 @@
+@namespace Oqtane.UI
+@inject IJSRuntime JsRuntime
+@inject NavigationManager NavigationManager
+
+@DynamicComponent
+
+@code {
+	[CascadingParameter] PageState PageState { get; set; }
+
+	RenderFragment DynamicComponent { get; set; }
+
+	protected override void OnParametersSet()
+	{
+		// handle page redirection
+		if (!string.IsNullOrEmpty(PageState.Page.Url))
+		{
+			NavigationManager.NavigateTo(PageState.Page.Url);
+			return;
+		}
+
+		DynamicComponent = builder =>
+		{
+			var themeType = Type.GetType(PageState.Page.ThemeType);
+			builder.OpenComponent(0, themeType);
+			builder.CloseComponent();
+		};
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		var interop = new Interop(JsRuntime);
+
+        // manage stylesheets for this page 
+		string batch = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
+		var links = new List<object>();
+		foreach (Resource resource in PageState.Page.Resources.Where(item => item.ResourceType == ResourceType.Stylesheet))
+		{
+			var prefix = "app-stylesheet-" + resource.Level.ToString().ToLower();
+			var url = (resource.Url.Contains("://")) ? resource.Url : PageState.Alias.BaseUrl + resource.Url;
+			links.Add(new { id = prefix + "-" + batch + "-" + (links.Count + 1).ToString("00"), rel = "stylesheet", href = url, type = "text/css", integrity = resource.Integrity ?? "", crossorigin = resource.CrossOrigin ?? "", insertbefore = prefix });
+        }
+        if (links.Any())
+        {
+            await interop.IncludeLinks(links.ToArray());
+        }
+		await interop.RemoveElementsById("app-stylesheet-page-", "", "app-stylesheet-page-" + batch + "-00");
+		await interop.RemoveElementsById("app-stylesheet-module-", "", "app-stylesheet-module-" + batch + "-00");
+
+		// set page title
+		if (!string.IsNullOrEmpty(PageState.Page.Title))
+		{
+			await interop.UpdateTitle(PageState.Page.Title);
+		}
+		else
+		{
+			await interop.UpdateTitle(PageState.Site.Name + " - " + PageState.Page.Name);
+		}
+	}
+}

@@ -1,0 +1,69 @@
+@namespace Oqtane.Modules.Admin.Roles
+@inherits ModuleBase
+@inject IRoleService RoleService
+@inject IStringLocalizer<Index> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+@if (_roles == null)
+{
+    <p><em>@SharedLocalizer["Loading"]</em></p>
+}
+else
+{
+	<ActionLink Action="Add" Text="Add Role" Security="SecurityAccessLevel.Edit" ResourceKey="AddRole" />
+
+    <Pager Items="@_roles">
+        <Header>
+            <th style="width: 1px;">&nbsp;</th>
+            <th style="width: 1px;">&nbsp;</th>
+            <th style="width: 1px;">&nbsp;</th>
+            <th>@SharedLocalizer["Name"]</th>
+        </Header>
+        <Row>
+			<td><ActionLink Action="Edit" Parameters="@($"id=" + context.RoleId.ToString())" Security="SecurityAccessLevel.Edit" Disabled="@(context.IsSystem)" ResourceKey="Edit" /></td>
+            <td><ActionDialog Header="Delete Role" Message="@string.Format(Localizer["Confirm.DeleteUser"], context.Name)" Action="Delete" Security="SecurityAccessLevel.Edit" Class="btn btn-danger" OnClick="@(async () => await DeleteRole(context))" Disabled="@(context.IsSystem)" ResourceKey="DeleteRole" /></td>
+			<td><ActionLink Action="Users" Parameters="@($"id=" + context.RoleId.ToString())" Security="SecurityAccessLevel.Edit" ResourceKey="Users" /></td>
+            <td>@context.Name</td>
+        </Row>
+    </Pager>
+}
+
+@code {
+    private List<Role> _roles;
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.View;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await GetRoles();
+    }
+
+    private async Task DeleteRole(Role role)
+    {
+        try
+        {
+            await RoleService.DeleteRoleAsync(role.RoleId);
+            await logger.LogInformation("Role Deleted {Role}", role);
+            await GetRoles();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await logger.LogError(ex, "Error Deleting Role {Role} {Error}", role, ex.Message);
+            AddModuleMessage(Localizer["Error.DeleteRole"], MessageType.Error);
+        }
+    }
+
+    private async Task GetRoles()
+    {
+        if (UserSecurity.IsAuthorized(PageState.User, RoleNames.Host))
+        {
+            _roles = await RoleService.GetRolesAsync(PageState.Site.SiteId, true);
+			_roles.RemoveAll(item => item.Name == RoleNames.Everyone || item.Name == RoleNames.Unauthenticated);
+        }
+        else
+        {
+            _roles = await RoleService.GetRolesAsync(PageState.Site.SiteId);
+        }
+    }
+}

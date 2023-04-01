@@ -1,0 +1,79 @@
+@namespace Oqtane.Modules.Admin.Roles
+@inherits ModuleBase
+@inject NavigationManager NavigationManager
+@inject IRoleService RoleService
+@inject IStringLocalizer<Add> Localizer
+@inject IStringLocalizer<SharedResources> SharedLocalizer
+
+<form @ref="form" class="@(validated ? "was-validated" : "needs-validation")" novalidate>
+    <div class="container">
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="name" HelpText="Name Of The Role" ResourceKey="Name">Name:</Label>
+            <div class="col-sm-9">
+                <input id="name" class="form-control" @bind="@_name" maxlength="256" required />
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="description" HelpText="A Short Description Of The Role Which Describes Its Purpose" ResourceKey="Description">Description:</Label>
+            <div class="col-sm-9">
+                <textarea id="description" class="form-control" @bind="@_description" rows="5" maxlength="256" required></textarea>
+            </div>
+        </div>
+        <div class="row mb-1 align-items-center">
+            <Label Class="col-sm-3" For="isautoassigned" HelpText="Indicates Whether Or Not New Users Are Automatically Assigned To This Role" ResourceKey="AutoAssigned">Auto Assigned?</Label>
+            <div class="col-sm-9">
+                <select id="isautoassigned" class="form-select" @bind="@_isautoassigned" required>
+                    <option value="True">@SharedLocalizer["Yes"]</option>
+                    <option value="False">@SharedLocalizer["No"]</option>
+                </select>
+            </div>
+        </div>
+        <br /><br />
+        <button type="button" class="btn btn-success" @onclick="SaveRole">@SharedLocalizer["Save"]</button>
+        <NavLink class="btn btn-secondary" href="@NavigateUrl()">@SharedLocalizer["Cancel"]</NavLink>
+    </div>
+</form>
+
+@code {
+    private ElementReference form;
+    private bool validated = false;
+
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _isautoassigned = "False";
+
+    public override SecurityAccessLevel SecurityAccessLevel => SecurityAccessLevel.Edit;
+
+    private async Task SaveRole()
+    {
+        validated = true;
+        var interop = new Interop(JSRuntime);
+        if (await interop.FormValid(form))
+        {
+            var role = new Role();
+            role.SiteId = PageState.Page.SiteId;
+            role.Name = _name;
+            role.Description = _description;
+            role.IsAutoAssigned = (_isautoassigned == null ? false : Boolean.Parse(_isautoassigned));
+            role.IsSystem = false;
+
+            try
+            {
+                role = await RoleService.AddRoleAsync(role);
+                await logger.LogInformation("Role Added {Role}", role);
+
+                NavigationManager.NavigateTo(NavigateUrl());
+            }
+            catch (Exception ex)
+            {
+                await logger.LogError(ex, "Error Adding Role {Role} {Error}", role, ex.Message);
+                AddModuleMessage(Localizer["Error.AddRole"], MessageType.Error);
+            }
+        }
+        else
+        {
+            AddModuleMessage(SharedLocalizer["Message.InfoRequired"], MessageType.Warning);
+        }
+    }
+
+}
